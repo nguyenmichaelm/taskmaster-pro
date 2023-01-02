@@ -1,4 +1,7 @@
 var tasks = {};
+$("#modalDueDate").datepicker({
+  minDate: 0
+});
 
 var createTask = function (taskText, taskDate, taskList) {
   // create elements that make up a task item
@@ -13,6 +16,8 @@ var createTask = function (taskText, taskDate, taskList) {
   // append span and p element to parent li
   taskLi.append(taskSpan, taskP);
 
+  // check due date
+  auditTask(taskLi);
 
   // append to ul list on the page
   $("#list-" + taskList).append(taskLi);
@@ -42,6 +47,27 @@ var loadTasks = function () {
 
 var saveTasks = function () {
   localStorage.setItem("tasks", JSON.stringify(tasks));
+};
+
+// use Moment.js for Due Date Audits
+var auditTask = function (taskEl) {
+  console.log(taskEl);
+  // get date from task element
+  var date = $(taskEl).find("span").text().trim();
+
+  // convert to moment object at 5:00pm
+  var time = moment(date, "L").set("hour", 17);
+
+  // remove any old classes from element
+  $(taskEl).removeClass("list-group-item-warning list-group-item-danger");
+
+  // apply new class if task is near/over due date
+  if (moment().isAfter(time)) {
+    $(taskEl).addClass("list-group-item-danger");
+  }
+  else if (Math.abs(moment().diff(time, "days")) <= 2) {
+    $(taskEl).addClass("list-group-item-warning");
+  }
 };
 
 $(".list-group").on("click", "p", function () {
@@ -101,16 +127,24 @@ $(".list-group").on("click", "span", function () {
   // swap out elements
   $(this).replaceWith(dateInput);
 
+  // enable jquery ui datepicker
+  dateInput.datepicker({
+    minDate: 0,
+    onClose: function () {
+      // when calendar is closed, force a "change" event on the `dateInput`
+      $(this).trigger("change");
+    }
+  });
+
   // automatically focus on new element
   dateInput.trigger("focus");
 });
 
 // value of due date was changed
-$(".list-group").on("blur", "input[type='text']", function () {
+$(".list-group").on("change", "input[type='text']", function () {
   // get current text
   var date = $(this)
-    .val()
-    .trim();
+    .val();
 
   // get the parent ul's id attribute
   var status = $(this)
@@ -134,6 +168,9 @@ $(".list-group").on("blur", "input[type='text']", function () {
 
   // replace input with span element
   $(this).replaceWith(taskSpan);
+
+  // Pass task's <li> element into auditTask() to check new due date
+  auditTask($(taskSpan).closest(".list-group-item"));
 });
 
 // modal was triggered
@@ -149,7 +186,7 @@ $("#task-form-modal").on("shown.bs.modal", function () {
 });
 
 // save button in modal was clicked
-$("#task-form-modal .btn-primary").click(function () {
+$("#task-form-modal .btn-save").click(function () {
   // get form values
   var taskText = $("#modalTaskDescription").val();
   var taskDate = $("#modalDueDate").val();
@@ -187,15 +224,21 @@ $(".card .list-group").sortable({
   helper: "clone",
   activate: function (event) {
     console.log("activate", this);
+    $(this).addClass("dropover");
+    $(".bottom-trash").addClass("bottom-trash-drag");
   },
   deactivate: function (event) {
     console.log("deactivate", this);
+    $(this).removeClass("dropover");
+    $(".bottom-trash").removeClass("bottom-trash-drag");
   },
   over: function (event) {
     console.log("over", event.target);
+    $(this).addClass("dropover-active");
   },
   out: function (event) {
     console.log("out", event.target);
+    $(this).removeClass("dropover-active");
   },
   update: function (event) {
     // array to store the task data in
@@ -231,20 +274,31 @@ $(".card .list-group").sortable({
   }
 });
 
+// use jQuery UI for dropping on trash option
 $("#trash").droppable({
   accept: ".card .list-group-item",
   tolerance: "touch",
   drop: function (event, ui) {
     console.log("drop");
     ui.draggable.remove();
+    $("bottom-trash").removeClass("bottom-trash-active")
   },
   over: function (event, ui) {
     console.log("over");
+    $("bottom-trash").addClass("bottom-trash-active")
   },
   out: function (event, ui) {
     console.log("out");
+    $("bottom-trash").removeClass("bottom-trash-active")
   }
 });
+
+//use timer to run auditTask() to automate reload every 30 mins
+setInterval(function () {
+  $(".card .list-group-item").each(function (index, el) {
+    auditTask(el);
+  });
+}, (1000 * 60) * 30);
 
 // load tasks for the first time
 loadTasks();
